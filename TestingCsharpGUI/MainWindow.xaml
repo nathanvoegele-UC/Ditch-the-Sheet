@@ -1,16 +1,47 @@
-﻿<Window x:Class="TestingCsharpGUI.MainWindow"
+<Window x:Class="TestingCsharpGUI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TestingCsharpGUI"
         mc:Ignorable="d"
-        Title="MainWindow" Height="Auto" Width="Auto">
+        Title="Job Applications" Height="520" Width="760"
+        MinHeight="420" MinWidth="600">
 
-    <StackPanel Margin="20" VerticalAlignment="Center">
-    <Label Content="Enter your name:" FontSize="14" FontWeight="Bold"/>
-    <TextBox x:Name="txtName" FontSize="14" Margin="0,5,0,15" Padding="5"/>
-    <Button x:Name="btnSubmit" Content="Greet Me" FontSize="14" Padding="10,5" Click="btnSubmit_Click"/>
-</StackPanel>
-
+    <TabControl Margin="16">
+        <TabItem Header="Add Job">
+            <StackPanel Margin="20" VerticalAlignment="Center">
+                <Label Content="Company:" FontSize="14" FontWeight="Bold"/>
+                <TextBox x:Name="txtCompany" FontSize="14" Margin="0,5,0,15" Padding="5"/>
+                <Label Content="Role:" FontSize="14" FontWeight="Bold"/>
+                <TextBox x:Name="txtRole" FontSize="14" Margin="0,5,0,15" Padding="5"/>
+                <Label Content="Date Applied:" FontSize="14" FontWeight="Bold"/>
+                <DatePicker x:Name="MyDatePicker" Width="140" Height="30" HorizontalAlignment="Left"/>
+                <Label Content="Location:" FontSize="14" FontWeight="Bold"/>
+                <TextBox x:Name="txtLocation" FontSize="14" Margin="0,5,0,15" Padding="5"/>
+                <Button x:Name="btnSubmit" Content="Save Job Application" FontSize="14"
+                        Padding="10,5" HorizontalAlignment="Left" Click="btnSubmit_Click"/>
+            </StackPanel>
+        </TabItem>
+        <TabItem Header="Jobs Applied">
+            <Grid Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Button Content="Refresh" Padding="10,5" Margin="0,0,0,10"
+                        HorizontalAlignment="Right" Click="btnRefreshJobs_Click"/>
+                <DataGrid x:Name="JobsDataGrid" Grid.Row="1" AutoGenerateColumns="False"
+                          IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                          SelectionMode="Single">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Company" Binding="{Binding Company}" Width="*"/>
+                        <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="*"/>
+                        <DataGridTextColumn Header="Date Applied" Binding="{Binding DateApplied}" Width="*"/>
+                        <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </TabItem>
+    </TabControl>
 </Window>

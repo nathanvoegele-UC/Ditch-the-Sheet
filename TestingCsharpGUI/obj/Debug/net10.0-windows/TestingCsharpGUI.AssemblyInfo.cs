@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TestingCsharpGUI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0b2f991cb305a1853f08495d844ba46ac630c286")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fbb3b29bdbdb6d4f4840849b8c366cd32aab2db9")]
 [assembly: System.Reflection.AssemblyProductAttribute("TestingCsharpGUI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TestingCsharpGUI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
