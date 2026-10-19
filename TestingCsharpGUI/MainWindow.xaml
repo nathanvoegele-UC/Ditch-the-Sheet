@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TestingCsharpGUI"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="Auto" Width="Auto">
+
     <StackPanel Margin="20" VerticalAlignment="Center">
     <Label Content="Enter your name:" FontSize="14" FontWeight="Bold"/>
     <TextBox x:Name="txtName" FontSize="14" Margin="0,5,0,15" Padding="5"/>
