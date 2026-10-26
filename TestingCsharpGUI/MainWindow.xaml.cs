@@ -14,7 +14,9 @@ public partial class MainWindow : Window
         ["Applied", "Interview", "Offer", "Rejected", "Saved"];
     private readonly string _databasePath;
     private List<JobApplication> _allJobs = [];
+    private List<NetworkContact> _networkContacts = [];
     private bool _isLoading;
+    private bool _isLoadingJobContact;
     private string _activeView = "All";
 
     public IReadOnlyList<string> StatusOptions => ApplicationStatuses;
@@ -34,6 +36,7 @@ public partial class MainWindow : Window
         InterviewsContent.RemoveRequested += job => RemoveInterview(job);
         InterviewsContent.DetailsRequested += OpenInterviewDetails;
         SavedJobsContent.StatusChanged += (comboBox, args) => Status_SelectionChanged(comboBox, args);
+        NetworkTrackingContent.ContactSaveRequested += SaveNetworkContact;
 
         _isLoading = true;
         LocationFilter.ItemsSource = new[] { "All locations" };
@@ -56,6 +59,7 @@ public partial class MainWindow : Window
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         LoadJobs();
+        LoadNetworkContacts();
     }
 
     private void AddJob_Click(object sender, RoutedEventArgs e)
@@ -111,13 +115,19 @@ public partial class MainWindow : Window
         }
 
         _activeView = view is "Interviews" or "Saved" ? view : "All";
+        if (view == "Network")
+        {
+            _activeView = "Network";
+        }
         bool showInterviews = _activeView == "Interviews";
         bool showSavedJobs = _activeView == "Saved";
-        AllJobsContent.Visibility = !showInterviews && !showSavedJobs
+        bool showNetwork = _activeView == "Network";
+        AllJobsContent.Visibility = !showInterviews && !showSavedJobs && !showNetwork
             ? Visibility.Visible
             : Visibility.Collapsed;
         SavedJobsContent.Visibility = showSavedJobs ? Visibility.Visible : Visibility.Collapsed;
         InterviewsContent.Visibility = showInterviews ? Visibility.Visible : Visibility.Collapsed;
+        NetworkTrackingContent.Visibility = showNetwork ? Visibility.Visible : Visibility.Collapsed;
         if (!string.Equals(_activeView, "All", StringComparison.Ordinal))
         {
             HideJobDetails();
@@ -126,6 +136,7 @@ public partial class MainWindow : Window
         {
             "Interviews" => "Interviews",
             "Saved" => "Saved for later",
+            "Network" => "Network Tracking",
             _ => "All jobs"
         };
         AllJobsNavButton.Background = _activeView == "All" ? new System.Windows.Media.SolidColorBrush(
@@ -145,9 +156,16 @@ public partial class MainWindow : Window
         SavedNavButton.Foreground = _activeView == "Saved"
             ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 120, 208))
             : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 66, 85));
-        ExportButton.Visibility = showInterviews || showSavedJobs
+        NetworkNavButton.Background = showNetwork
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(234, 243, 252))
+            : System.Windows.Media.Brushes.Transparent;
+        NetworkNavButton.Foreground = showNetwork
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 120, 208))
+            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 66, 85));
+        ExportButton.Visibility = showInterviews || showSavedJobs || showNetwork
             ? Visibility.Collapsed
             : Visibility.Visible;
+        AddJobButton.Visibility = showNetwork ? Visibility.Collapsed : Visibility.Visible;
 
         if (showInterviews)
         {
@@ -155,7 +173,10 @@ public partial class MainWindow : Window
         }
         else if (!showSavedJobs)
         {
-            ApplyFilters();
+            if (!showNetwork)
+            {
+                ApplyFilters();
+            }
         }
     }
 
@@ -173,8 +194,88 @@ public partial class MainWindow : Window
         }
 
         JobDetailsPanel.DataContext = job;
+        _isLoadingJobContact = true;
+        JobContactSelector.ItemsSource = _networkContacts;
+        JobContactSelector.SelectedValue = job.NetworkContactId;
+        _isLoadingJobContact = false;
         JobDetailsPanel.Visibility = Visibility.Visible;
         JobsContentGrid.ColumnDefinitions[1].Width = new GridLength(330);
+    }
+
+    private void JobContact_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingJobContact || JobDetailsPanel.DataContext is not JobApplication job)
+        {
+            return;
+        }
+
+        long? selectedContactId = JobContactSelector.SelectedValue is long contactId
+            ? contactId
+            : null;
+        if (job.NetworkContactId == selectedContactId)
+        {
+            return;
+        }
+
+        try
+        {
+            using var connection = new SqliteConnection($"Data Source={_databasePath}");
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE Submissions SET NetworkContactId = $contactId WHERE Id = $jobId;";
+            command.Parameters.AddWithValue("$contactId", selectedContactId.HasValue
+                ? selectedContactId.Value
+                : DBNull.Value);
+            command.Parameters.AddWithValue("$jobId", job.Id);
+            if (command.ExecuteNonQuery() != 1)
+            {
+                throw new InvalidOperationException("The job application was not found.");
+            }
+        }
+        catch (Exception exception) when (
+            exception is SqliteException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            MessageBox.Show(
+                $"The networking contact could not be linked to this job. {exception.Message}",
+                "Database Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            _isLoadingJobContact = true;
+            JobContactSelector.SelectedValue = job.NetworkContactId;
+            _isLoadingJobContact = false;
+            return;
+        }
+
+        job.NetworkContactId = selectedContactId;
+        job.NetworkContactName = _networkContacts
+            .FirstOrDefault(contact => contact.Id == selectedContactId)?.Name ?? string.Empty;
+        JobDetailsPanel.DataContext = null;
+        JobDetailsPanel.DataContext = job;
+        JobsDataGrid.Items.Refresh();
+    }
+
+    private void ViewLinkedContact_Click(object sender, RoutedEventArgs e)
+    {
+        if (JobDetailsPanel.DataContext is not JobApplication { NetworkContactId: long contactId })
+        {
+            return;
+        }
+
+        NetworkContact? contact = _networkContacts.FirstOrDefault(item => item.Id == contactId);
+        if (contact is null)
+        {
+            MessageBox.Show("The linked networking contact could not be found.",
+                "Contact unavailable", MessageBoxButton.OK, MessageBoxImage.Warning);
+            LoadNetworkContacts();
+            return;
+        }
+
+        var detailsWindow = new NetworkContactDetailsWindow(contact)
+        {
+            Owner = this
+        };
+        detailsWindow.ShowDialog();
     }
 
     private void CloseJobDetails_Click(object sender, RoutedEventArgs e)
@@ -510,9 +611,12 @@ public partial class MainWindow : Window
 
             using var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT Id, Company, Role, Location, WorkMode, Salary, SelectedDate, Status, InterviewDate, InterviewTime, PayAmount, PayType
-                FROM Submissions
-                ORDER BY Id DESC;
+                SELECT s.Id, s.Company, s.Role, s.Location, s.WorkMode, s.Salary, s.SelectedDate,
+                       s.Status, s.InterviewDate, s.InterviewTime, s.PayAmount, s.PayType,
+                       s.NetworkContactId, COALESCE(n.Name, '')
+                FROM Submissions s
+                LEFT JOIN NetworkContacts n ON n.Id = s.NetworkContactId
+                ORDER BY s.Id DESC;
                 """;
 
             using var reader = command.ExecuteReader();
@@ -532,7 +636,9 @@ public partial class MainWindow : Window
                     DateApplied = ReadDatabaseDate(reader, 6),
                     Status = reader.GetString(7),
                     InterviewDate = ReadDatabaseDate(reader, 8),
-                    InterviewTime = ReadDatabaseTime(reader, 9)
+                    InterviewTime = ReadDatabaseTime(reader, 9),
+                    NetworkContactId = reader.IsDBNull(12) ? null : reader.GetInt64(12),
+                    NetworkContactName = reader.GetString(13)
                 });
             }
 
@@ -548,6 +654,96 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(
                 $"The saved job applications could not be loaded. {exception.Message}",
+                "Database Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private bool SaveNetworkContact(NetworkContact contact)
+    {
+        try
+        {
+            using var connection = new SqliteConnection($"Data Source={_databasePath}");
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO NetworkContacts
+                    (Name, Company, Position, Email, PhoneNumber, LinkedInUrl, Notes)
+                VALUES
+                    ($name, $company, $position, $email, $phoneNumber, $linkedInUrl, $notes);
+                """;
+            command.Parameters.AddWithValue("$name", contact.Name);
+            command.Parameters.AddWithValue("$company", contact.Company);
+            command.Parameters.AddWithValue("$position", contact.Position);
+            command.Parameters.AddWithValue("$email", contact.Email);
+            command.Parameters.AddWithValue("$phoneNumber", contact.PhoneNumber);
+            command.Parameters.AddWithValue("$linkedInUrl", contact.LinkedInUrl);
+            command.Parameters.AddWithValue("$notes", contact.Notes);
+            command.ExecuteNonQuery();
+        }
+        catch (Exception exception) when (
+            exception is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                $"The connection could not be saved. {exception.Message}",
+                "Database Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return false;
+        }
+
+        LoadNetworkContacts();
+        return true;
+    }
+
+    private void LoadNetworkContacts()
+    {
+        try
+        {
+            var contacts = new List<NetworkContact>();
+            using var connection = new SqliteConnection($"Data Source={_databasePath}");
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT Id, Name, Company, Position, Email, PhoneNumber, LinkedInUrl, Notes
+                FROM NetworkContacts
+                ORDER BY Name COLLATE NOCASE, Id DESC;
+                """;
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                contacts.Add(new NetworkContact
+                {
+                    Id = reader.GetInt64(0),
+                    Name = reader.GetString(1),
+                    Company = reader.GetString(2),
+                    Position = reader.GetString(3),
+                    Email = reader.GetString(4),
+                    PhoneNumber = reader.GetString(5),
+                    LinkedInUrl = reader.GetString(6),
+                    Notes = reader.GetString(7)
+                });
+            }
+
+            _networkContacts = contacts;
+            NetworkTrackingContent.SetContacts(_networkContacts);
+            if (JobDetailsPanel.DataContext is JobApplication selectedJob)
+            {
+                _isLoadingJobContact = true;
+                JobContactSelector.ItemsSource = _networkContacts;
+                JobContactSelector.SelectedValue = selectedJob.NetworkContactId;
+                _isLoadingJobContact = false;
+            }
+        }
+        catch (Exception exception) when (
+            exception is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                $"The saved connections could not be loaded. {exception.Message}",
                 "Database Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -608,10 +804,28 @@ public partial class MainWindow : Window
                     PayType TEXT NOT NULL DEFAULT 'Yearly',
                     Status TEXT NOT NULL DEFAULT 'Applied',
                     InterviewDate TEXT,
-                    InterviewTime TEXT
+                    InterviewTime TEXT,
+                    NetworkContactId INTEGER REFERENCES NetworkContacts(Id) ON DELETE SET NULL
                 );
                 """;
             createCommand.ExecuteNonQuery();
+        }
+
+        using (var createContactsCommand = connection.CreateCommand())
+        {
+            createContactsCommand.CommandText = """
+                CREATE TABLE IF NOT EXISTS NetworkContacts (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL,
+                    Company TEXT NOT NULL DEFAULT '',
+                    Position TEXT NOT NULL DEFAULT '',
+                    Email TEXT NOT NULL DEFAULT '',
+                    PhoneNumber TEXT NOT NULL DEFAULT '',
+                    LinkedInUrl TEXT NOT NULL DEFAULT '',
+                    Notes TEXT NOT NULL DEFAULT ''
+                );
+                """;
+            createContactsCommand.ExecuteNonQuery();
         }
 
         var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -633,7 +847,8 @@ public partial class MainWindow : Window
             ["PayType"] = "ALTER TABLE Submissions ADD COLUMN PayType TEXT NOT NULL DEFAULT 'Yearly';",
             ["Status"] = "ALTER TABLE Submissions ADD COLUMN Status TEXT NOT NULL DEFAULT 'Applied';",
             ["InterviewDate"] = "ALTER TABLE Submissions ADD COLUMN InterviewDate TEXT;",
-            ["InterviewTime"] = "ALTER TABLE Submissions ADD COLUMN InterviewTime TEXT;"
+            ["InterviewTime"] = "ALTER TABLE Submissions ADD COLUMN InterviewTime TEXT;",
+            ["NetworkContactId"] = "ALTER TABLE Submissions ADD COLUMN NetworkContactId INTEGER REFERENCES NetworkContacts(Id) ON DELETE SET NULL;"
         };
 
         foreach ((string column, string migration) in migrations)

@@ -13,6 +13,9 @@ public sealed class JobApplication
     public string Status { get; set; } = "Applied";
     public DateTime? InterviewDate { get; init; }
     public TimeSpan? InterviewTime { get; init; }
+    public long? NetworkContactId { get; set; }
+    public string NetworkContactName { get; set; } = string.Empty;
+    public bool HasLinkedContact => !string.IsNullOrWhiteSpace(NetworkContactName);
 
     public string LocationDisplay => string.IsNullOrWhiteSpace(Location) ? "—" : Location;
     public string PayDisplay => PayAmount.HasValue
