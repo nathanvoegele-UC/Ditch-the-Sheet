@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TestingCsharpGUI": {
+      "commandName": "Project",
+      "debugEngines": "managed-dotnet"
+    }
+  }
+}
