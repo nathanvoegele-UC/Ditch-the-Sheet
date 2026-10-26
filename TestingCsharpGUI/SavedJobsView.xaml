@@ -1,0 +1,53 @@
+<UserControl x:Class="TestingCsharpGUI.SavedJobsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TextBrush" Color="#263342"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#788594"/>
+    </UserControl.Resources>
+    <Border Background="White" BorderBrush="#E2E7EC" BorderThickness="1"
+            CornerRadius="5" Padding="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                <TextBlock Text="Saved jobs" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}"/>
+                <TextBlock x:Name="SavedCountText" DockPanel.Dock="Right"
+                           Foreground="{StaticResource MutedBrush}"/>
+            </DockPanel>
+            <DataGrid x:Name="SavedJobsDataGrid" Grid.Row="1" AutoGenerateColumns="False"
+                      IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                      CanUserReorderColumns="True" GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column" BorderThickness="0" RowHeight="44"
+                      AlternatingRowBackground="#FBFCFD" SelectionMode="Single"
+                      SelectionUnit="FullRow">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Company" Binding="{Binding Company}" Width="1.1*"/>
+                    <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="1.6*"/>
+                    <DataGridTextColumn Header="Location" Binding="{Binding LocationDisplay}" Width="1.2*"/>
+                    <DataGridTextColumn Header="Work mode" Binding="{Binding WorkMode}" Width="0.8*"/>
+                    <DataGridTextColumn Header="Pay" Binding="{Binding PayDisplay}" Width="0.9*"/>
+                    <DataGridTextColumn Header="Date added" Binding="{Binding DateAppliedDisplay}" Width="0.9*"/>
+                    <DataGridTemplateColumn Header="Status" Width="1*">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ComboBox ItemsSource="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=StatusOptions}"
+                                          SelectedItem="{Binding Status, Mode=TwoWay}"
+                                          SelectionChanged="Status_SelectionChanged"
+                                          Padding="5,2" MinHeight="27" BorderThickness="0"
+                                          Background="Transparent"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock x:Name="NoSavedJobsText" Grid.Row="1"
+                       Text="No saved jobs yet. Set a job's status to Saved to add it here."
+                       Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" TextWrapping="Wrap" IsHitTestVisible="False"/>
+        </Grid>
+    </Border>
+</UserControl>

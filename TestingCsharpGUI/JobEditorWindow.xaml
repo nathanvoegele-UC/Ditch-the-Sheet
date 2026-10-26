@@ -35,8 +35,11 @@
                 <TextBox x:Name="LocationInput" Margin="0,0,0,13"/>
                 <TextBlock Text="Work mode" FontWeight="SemiBold" Margin="0,0,0,5"/>
                 <ComboBox x:Name="WorkModeInput" Margin="0,0,0,13"/>
-                <TextBlock Text="Annual salary (USD)" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                <TextBox x:Name="SalaryInput" Margin="0,0,0,13"/>
+                <TextBlock Text="Pay type" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                <ComboBox x:Name="PayTypeInput" Margin="0,0,0,13"
+                          SelectionChanged="PayTypeInput_SelectionChanged"/>
+                <TextBlock x:Name="PayAmountLabel" Text="Yearly salary (USD)" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                <TextBox x:Name="PayAmountInput" Margin="0,0,0,13"/>
                 <TextBlock Text="Date applied" FontWeight="SemiBold" Margin="0,0,0,5"/>
                 <DatePicker x:Name="DateAppliedInput" Margin="0,0,0,13"/>
                 <TextBlock Text="Status" FontWeight="SemiBold" Margin="0,0,0,5"/>

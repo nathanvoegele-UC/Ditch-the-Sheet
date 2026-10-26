@@ -30,22 +30,26 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(databaseDirectory);
         _databasePath = Path.Combine(databaseDirectory, "submissions.db");
         InitializeDatabase();
+        InterviewsContent.ScheduleRequested += ScheduleInterview;
+        InterviewsContent.RemoveRequested += job => RemoveInterview(job);
+        InterviewsContent.DetailsRequested += OpenInterviewDetails;
+        SavedJobsContent.StatusChanged += (comboBox, args) => Status_SelectionChanged(comboBox, args);
 
         _isLoading = true;
         LocationFilter.ItemsSource = new[] { "All locations" };
         LocationFilter.SelectedIndex = 0;
         WorkModeFilter.ItemsSource = new[] { "Any work mode", "On-site", "Hybrid", "Remote" };
         WorkModeFilter.SelectedIndex = 0;
-        SalaryFilter.ItemsSource = new[] { "Any salary", "$50,000+", "$75,000+", "$100,000+" };
+        SalaryFilter.ItemsSource = new[]
+        {
+            "Any pay",
+            "Annual salary: $50,000+",
+            "Annual salary: $75,000+",
+            "Annual salary: $100,000+"
+        };
         SalaryFilter.SelectedIndex = 0;
         StatusFilter.ItemsSource = new[] { "Any status" }.Concat(ApplicationStatuses).ToArray();
         StatusFilter.SelectedIndex = 0;
-        InterviewCalendar.SelectedDate = DateTime.Today;
-        InterviewTimeSelector.ItemsSource = Enumerable.Range(0, 48)
-            .Select(slot => DateTime.Today.AddMinutes(slot * 30).ToString("h:mm tt", CultureInfo.CurrentCulture))
-            .ToList();
-        InterviewTimeSelector.SelectedItem = DateTime.Today.AddHours(9)
-            .ToString("h:mm tt", CultureInfo.CurrentCulture);
         _isLoading = false;
     }
 
@@ -70,16 +74,17 @@ public partial class MainWindow : Window
             using var command = connection.CreateCommand();
             command.CommandText = """
                 INSERT INTO Submissions
-                    (Company, Role, SelectedDate, Location, WorkMode, Salary, Status, InterviewDate)
+                    (Company, Role, SelectedDate, Location, WorkMode, Salary, PayAmount, PayType, Status, InterviewDate)
                 VALUES
-                    ($company, $role, $selectedDate, $location, $workMode, $salary, $status, $interviewDate);
+                    ($company, $role, $selectedDate, $location, $workMode, NULL, $payAmount, $payType, $status, $interviewDate);
                 """;
             command.Parameters.AddWithValue("$company", job.Company);
             command.Parameters.AddWithValue("$role", job.Role);
             command.Parameters.AddWithValue("$selectedDate", ToDatabaseDate(job.DateApplied));
             command.Parameters.AddWithValue("$location", job.Location);
             command.Parameters.AddWithValue("$workMode", job.WorkMode);
-            command.Parameters.AddWithValue("$salary", job.Salary.HasValue ? job.Salary.Value : DBNull.Value);
+            command.Parameters.AddWithValue("$payAmount", job.PayAmount.HasValue ? job.PayAmount.Value : DBNull.Value);
+            command.Parameters.AddWithValue("$payType", job.PayType);
             command.Parameters.AddWithValue("$status", job.Status);
             command.Parameters.AddWithValue("$interviewDate", ToDatabaseDate(job.InterviewDate));
             command.ExecuteNonQuery();
@@ -107,10 +112,13 @@ public partial class MainWindow : Window
 
         _activeView = view is "Interviews" or "Saved" ? view : "All";
         bool showInterviews = _activeView == "Interviews";
-        JobsFilterPanel.Visibility = showInterviews ? Visibility.Collapsed : Visibility.Visible;
-        JobsTablePanel.Visibility = showInterviews ? Visibility.Collapsed : Visibility.Visible;
-        InterviewsPanel.Visibility = showInterviews ? Visibility.Visible : Visibility.Collapsed;
-        if (showInterviews)
+        bool showSavedJobs = _activeView == "Saved";
+        AllJobsContent.Visibility = !showInterviews && !showSavedJobs
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        SavedJobsContent.Visibility = showSavedJobs ? Visibility.Visible : Visibility.Collapsed;
+        InterviewsContent.Visibility = showInterviews ? Visibility.Visible : Visibility.Collapsed;
+        if (!string.Equals(_activeView, "All", StringComparison.Ordinal))
         {
             HideJobDetails();
         }
@@ -137,13 +145,15 @@ public partial class MainWindow : Window
         SavedNavButton.Foreground = _activeView == "Saved"
             ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 120, 208))
             : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 66, 85));
-        ExportButton.Visibility = showInterviews ? Visibility.Collapsed : Visibility.Visible;
+        ExportButton.Visibility = showInterviews || showSavedJobs
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 
         if (showInterviews)
         {
-            UpdateInterviewCalendar();
+            InterviewsContent.SetJobs(_allJobs);
         }
-        else
+        else if (!showSavedJobs)
         {
             ApplyFilters();
         }
@@ -173,6 +183,59 @@ public partial class MainWindow : Window
         HideJobDetails();
     }
 
+    private void DeleteJob_Click(object sender, RoutedEventArgs e)
+    {
+        if (JobDetailsPanel.DataContext is not JobApplication job)
+        {
+            return;
+        }
+
+        MessageBoxResult result = MessageBox.Show(
+            $"Permanently delete the job application for {job.Company} — {job.Role}? This cannot be undone.",
+            "Delete job application",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            using var connection = new SqliteConnection($"Data Source={_databasePath}");
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM Submissions WHERE Id = $id;";
+            command.Parameters.AddWithValue("$id", job.Id);
+
+            if (command.ExecuteNonQuery() != 1)
+            {
+                MessageBox.Show(
+                    "The job application was not found and could not be deleted. The job list will be refreshed.",
+                    "Delete failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                LoadJobs();
+                return;
+            }
+        }
+        catch (Exception exception) when (
+            exception is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                $"The job application could not be deleted. {exception.Message}",
+                "Database Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        JobsDataGrid.SelectedItem = null;
+        HideJobDetails();
+        LoadJobs();
+    }
+
     private void HideJobDetails()
     {
         JobDetailsPanel.DataContext = null;
@@ -180,45 +243,19 @@ public partial class MainWindow : Window
         JobsContentGrid.ColumnDefinitions[1].Width = new GridLength(0);
     }
 
-    private void InterviewCalendar_SelectedDatesChanged(object? sender, SelectionChangedEventArgs e)
+    private void OpenInterviewDetails(JobApplication job)
     {
-        UpdateInterviewCalendar();
+        var detailsWindow = new InterviewDetailsWindow(job)
+        {
+            Owner = this
+        };
+        detailsWindow.RemoveRequested += (selectedJob, complete) =>
+            complete(RemoveInterview(selectedJob));
+        detailsWindow.ShowDialog();
     }
 
-    private void UpdateInterviewCalendar()
+    private void ScheduleInterview(JobApplication job, DateTime interviewDate, TimeSpan interviewTime)
     {
-        if (InterviewCalendar.SelectedDate is not DateTime selectedDate)
-        {
-            return;
-        }
-
-        List<JobApplication> interviews = _allJobs
-            .Where(job => job.Status == "Interview" && job.InterviewDate?.Date == selectedDate.Date)
-            .OrderBy(job => job.InterviewTime)
-            .ThenBy(job => job.Company, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-        InterviewDayHeading.Text = selectedDate.ToString("dddd, MMMM d, yyyy", CultureInfo.CurrentCulture);
-        InterviewList.ItemsSource = interviews;
-        NoInterviewsText.Visibility = interviews.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void ScheduleInterview_Click(object sender, RoutedEventArgs e)
-    {
-        if (InterviewJobSelector.SelectedItem is not JobApplication job
-            || InterviewCalendar.SelectedDate is not DateTime interviewDate
-            || InterviewTimeSelector.SelectedItem is not string interviewTimeText
-            || !DateTime.TryParseExact(
-                interviewTimeText,
-                "h:mm tt",
-                CultureInfo.CurrentCulture,
-                DateTimeStyles.None,
-                out DateTime parsedInterviewTime))
-        {
-            MessageBox.Show("Select a job, date, and time to schedule an interview.",
-                "Interview details required", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
         try
         {
             using var connection = new SqliteConnection($"Data Source={_databasePath}");
@@ -232,7 +269,7 @@ public partial class MainWindow : Window
                 """;
             command.Parameters.AddWithValue("$status", "Interview");
             command.Parameters.AddWithValue("$interviewDate", ToDatabaseDate(interviewDate));
-            command.Parameters.AddWithValue("$interviewTime", ToDatabaseTime(parsedInterviewTime.TimeOfDay));
+            command.Parameters.AddWithValue("$interviewTime", ToDatabaseTime(interviewTime));
             command.Parameters.AddWithValue("$id", job.Id);
             command.ExecuteNonQuery();
         }
@@ -248,16 +285,10 @@ public partial class MainWindow : Window
         }
 
         LoadJobs();
-        UpdateInterviewCalendar();
     }
 
-    private void RemoveInterview_Click(object sender, RoutedEventArgs e)
+    private bool RemoveInterview(JobApplication job)
     {
-        if (sender is not Button { DataContext: JobApplication job })
-        {
-            return;
-        }
-
         MessageBoxResult result = MessageBox.Show(
             $"Remove the interview for {job.Company} — {job.Role}? The job application will remain and its status will be reset to Applied.",
             "Remove interview",
@@ -265,7 +296,7 @@ public partial class MainWindow : Window
             MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes)
         {
-            return;
+            return false;
         }
 
         try
@@ -291,11 +322,10 @@ public partial class MainWindow : Window
                 "Database Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            return;
+            return false;
         }
-
         LoadJobs();
-        UpdateInterviewCalendar();
+        return true;
     }
 
     private void Search_Click(object sender, RoutedEventArgs e)
@@ -346,22 +376,21 @@ public partial class MainWindow : Window
         string search = SearchTextBox.Text.Trim();
         int? minimumSalary = salaryFilter switch
         {
-            "$50,000+" => 50000,
-            "$75,000+" => 75000,
-            "$100,000+" => 100000,
+            "Annual salary: $50,000+" => 50000,
+            "Annual salary: $75,000+" => 75000,
+            "Annual salary: $100,000+" => 100000,
             _ => null
         };
 
         List<JobApplication> filtered = _allJobs.Where(job =>
-            (_activeView != "Interviews" || job.Status == "Interview")
-            && (_activeView != "Saved" || job.Status == "Saved")
-            && (string.IsNullOrEmpty(search)
+            (string.IsNullOrEmpty(search)
                 || job.Company.Contains(search, StringComparison.CurrentCultureIgnoreCase)
                 || job.Role.Contains(search, StringComparison.CurrentCultureIgnoreCase)
                 || job.Location.Contains(search, StringComparison.CurrentCultureIgnoreCase))
             && (location == "All locations" || job.Location == location)
             && (workMode == "Any work mode" || job.WorkMode == workMode)
-            && (!minimumSalary.HasValue || job.Salary >= minimumSalary)
+            && (!minimumSalary.HasValue
+                || (job.PayType == "Yearly" && job.PayAmount >= minimumSalary))
             && (status == "Any status" || job.Status == status))
             .ToList();
 
@@ -401,7 +430,8 @@ public partial class MainWindow : Window
             }
             UpdateDashboardMetrics();
             ApplyFilters();
-            UpdateInterviewCalendar();
+            SavedJobsContent.SetJobs(_allJobs.Where(job => job.Status == "Saved"));
+            InterviewsContent.SetJobs(_allJobs);
         }
         catch (Exception exception) when (
             exception is SqliteException or IOException or UnauthorizedAccessException)
@@ -436,7 +466,7 @@ public partial class MainWindow : Window
         try
         {
             var csv = new StringBuilder();
-            csv.AppendLine("Company,Role,Location,Work Mode,Salary,Date Applied,Status,Interview Date/Time");
+            csv.AppendLine("Company,Role,Location,Work Mode,Pay Amount,Pay Type,Date Applied,Status,Interview Date/Time");
             foreach (JobApplication job in jobs)
             {
                 csv.AppendLine(string.Join(",", new[]
@@ -445,7 +475,8 @@ public partial class MainWindow : Window
                     CsvEscape(job.Role),
                     CsvEscape(job.Location),
                     CsvEscape(job.WorkMode),
-                    CsvEscape(job.Salary?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
+                    CsvEscape(job.PayAmount?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
+                    CsvEscape(job.PayType),
                     CsvEscape(job.DateApplied?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty),
                     CsvEscape(job.Status),
                     CsvEscape(job.InterviewDate.HasValue
@@ -479,7 +510,7 @@ public partial class MainWindow : Window
 
             using var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT Id, Company, Role, Location, WorkMode, Salary, SelectedDate, Status, InterviewDate, InterviewTime
+                SELECT Id, Company, Role, Location, WorkMode, Salary, SelectedDate, Status, InterviewDate, InterviewTime, PayAmount, PayType
                 FROM Submissions
                 ORDER BY Id DESC;
                 """;
@@ -494,7 +525,10 @@ public partial class MainWindow : Window
                     Role = reader.GetString(2),
                     Location = reader.GetString(3),
                     WorkMode = reader.GetString(4),
-                    Salary = reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                    PayAmount = reader.IsDBNull(10)
+                        ? reader.IsDBNull(5) ? null : reader.GetDecimal(5)
+                        : reader.GetDecimal(10),
+                    PayType = reader.GetString(11),
                     DateApplied = ReadDatabaseDate(reader, 6),
                     Status = reader.GetString(7),
                     InterviewDate = ReadDatabaseDate(reader, 8),
@@ -503,14 +537,11 @@ public partial class MainWindow : Window
             }
 
             _allJobs = jobs;
-            InterviewJobSelector.ItemsSource = _allJobs
-                .Where(job => job.Status is not ("Offer" or "Rejected"))
-                .OrderBy(job => job.Company, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
             UpdateLocationFilter();
             UpdateDashboardMetrics();
             ApplyFilters();
-            UpdateInterviewCalendar();
+            SavedJobsContent.SetJobs(_allJobs.Where(job => job.Status == "Saved"));
+            InterviewsContent.SetJobs(_allJobs);
         }
         catch (Exception exception) when (
             exception is SqliteException or IOException or UnauthorizedAccessException or FormatException)
@@ -573,6 +604,8 @@ public partial class MainWindow : Window
                     Location TEXT NOT NULL,
                     WorkMode TEXT NOT NULL DEFAULT '',
                     Salary INTEGER,
+                    PayAmount REAL,
+                    PayType TEXT NOT NULL DEFAULT 'Yearly',
                     Status TEXT NOT NULL DEFAULT 'Applied',
                     InterviewDate TEXT,
                     InterviewTime TEXT
@@ -596,6 +629,8 @@ public partial class MainWindow : Window
         {
             ["WorkMode"] = "ALTER TABLE Submissions ADD COLUMN WorkMode TEXT NOT NULL DEFAULT '';",
             ["Salary"] = "ALTER TABLE Submissions ADD COLUMN Salary INTEGER;",
+            ["PayAmount"] = "ALTER TABLE Submissions ADD COLUMN PayAmount REAL;",
+            ["PayType"] = "ALTER TABLE Submissions ADD COLUMN PayType TEXT NOT NULL DEFAULT 'Yearly';",
             ["Status"] = "ALTER TABLE Submissions ADD COLUMN Status TEXT NOT NULL DEFAULT 'Applied';",
             ["InterviewDate"] = "ALTER TABLE Submissions ADD COLUMN InterviewDate TEXT;",
             ["InterviewTime"] = "ALTER TABLE Submissions ADD COLUMN InterviewTime TEXT;"
@@ -610,6 +645,14 @@ public partial class MainWindow : Window
                 migrationCommand.ExecuteNonQuery();
             }
         }
+
+        using var migratePayCommand = connection.CreateCommand();
+        migratePayCommand.CommandText = """
+            UPDATE Submissions
+            SET PayAmount = Salary
+            WHERE PayAmount IS NULL AND Salary IS NOT NULL;
+            """;
+        migratePayCommand.ExecuteNonQuery();
     }
 
     private static object ToDatabaseDate(DateTime? date) =>

@@ -14,7 +14,16 @@ public partial class JobEditorWindow : Window
         WorkModeInput.SelectedIndex = 0;
         StatusInput.ItemsSource = MainWindow.ApplicationStatusOptions;
         StatusInput.SelectedItem = "Applied";
+        PayTypeInput.ItemsSource = new[] { "Yearly", "Hourly" };
+        PayTypeInput.SelectedItem = "Yearly";
         DateAppliedInput.SelectedDate = DateTime.Today;
+    }
+
+    private void PayTypeInput_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        PayAmountLabel.Text = PayTypeInput.SelectedItem as string == "Hourly"
+            ? "Hourly rate (USD)"
+            : "Yearly salary (USD)";
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -28,19 +37,19 @@ public partial class JobEditorWindow : Window
             return;
         }
 
-        int? salary = null;
-        if (!string.IsNullOrWhiteSpace(SalaryInput.Text))
+        decimal? payAmount = null;
+        if (!string.IsNullOrWhiteSpace(PayAmountInput.Text))
         {
-            string salaryText = SalaryInput.Text.Trim().Replace(",", string.Empty).Replace("$", string.Empty);
-            if (!int.TryParse(salaryText, NumberStyles.None, CultureInfo.InvariantCulture, out int parsedSalary)
-                || parsedSalary < 0)
+            string payText = PayAmountInput.Text.Trim().Replace(",", string.Empty).Replace("$", string.Empty);
+            if (!decimal.TryParse(payText, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsedPay)
+                || parsedPay < 0)
             {
-                MessageBox.Show("Enter a valid annual salary as a non-negative whole number.",
-                    "Invalid salary", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Enter a valid non-negative pay amount, such as 65000 or 24.50.",
+                    "Invalid pay amount", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            salary = parsedSalary;
+            payAmount = parsedPay;
         }
 
         Application = new JobApplication
@@ -49,7 +58,8 @@ public partial class JobEditorWindow : Window
             Role = role,
             Location = LocationInput.Text.Trim(),
             WorkMode = WorkModeInput.SelectedItem as string ?? string.Empty,
-            Salary = salary,
+            PayAmount = payAmount,
+            PayType = PayTypeInput.SelectedItem as string ?? "Yearly",
             DateApplied = DateAppliedInput.SelectedDate,
             Status = StatusInput.SelectedItem as string ?? "Applied",
             InterviewDate = InterviewDateInput.SelectedDate
