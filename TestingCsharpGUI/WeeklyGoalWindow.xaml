@@ -1,0 +1,32 @@
+<Window x:Class="TestingCsharpGUI.WeeklyGoalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Change weekly goal" Height="280" Width="400"
+        ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
+        Background="#F4F6F8">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Text="Weekly application goal" FontSize="20" FontWeight="Bold"
+                   Foreground="#263342"/>
+        <StackPanel Grid.Row="1" Margin="0,14,0,0">
+            <TextBlock Text="How many applications would you like to send this week?"
+                       Foreground="#788594" TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <TextBox x:Name="GoalInput" Padding="9,7" BorderBrush="#DCE2E8"
+                     BorderThickness="1" MaxLength="4"/>
+            <TextBlock Text="Enter a whole number from 1 to 1000."
+                       Foreground="#788594" FontSize="11" Margin="0,5,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="Cancel" IsCancel="True" Padding="14,7" Margin="0,0,8,0"/>
+            <Button Content="Save goal" IsDefault="True" Padding="14,7"
+                    Background="#2878D0" Foreground="White" BorderBrush="#2878D0"
+                    Click="SaveGoal_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

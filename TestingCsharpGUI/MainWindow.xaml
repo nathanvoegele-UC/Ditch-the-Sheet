@@ -58,6 +58,8 @@
                             HorizontalContentAlignment="Left" Margin="0,0,0,5" BorderThickness="0" Background="Transparent"/>
                     <Button x:Name="NetworkNavButton" Content="♧   Network Tracking" Tag="Network" Click="Navigation_Click"
                             HorizontalContentAlignment="Left" Margin="0,0,0,5" BorderThickness="0" Background="Transparent"/>
+                    <Button x:Name="DataNavButton" Content="△   Job Analytics" Tag="Data" Click="Navigation_Click"
+                            HorizontalContentAlignment="Left" Margin="0,0,0,5" BorderThickness="0" Background="Transparent"/>        
                 </StackPanel>
                 <Border DockPanel.Dock="Bottom" Background="#F6F8FA" BorderBrush="#E2E7EC" BorderThickness="1" CornerRadius="5" Padding="10">
                     <StackPanel>
@@ -280,6 +282,8 @@
                                   Visibility="Collapsed"/>
             <local:NetworkTrackingView x:Name="NetworkTrackingContent" Grid.Row="2" Grid.RowSpan="2"
                                        Visibility="Collapsed"/>
+            <local:AnalyticsView x:Name="AnalyticsContent" Grid.Row="2" Grid.RowSpan="2"
+                                 Visibility="Collapsed"/>
         </Grid>
     </Grid>
 </Window>

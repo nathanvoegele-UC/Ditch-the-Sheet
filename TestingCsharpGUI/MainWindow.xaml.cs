@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private bool _isLoading;
     private bool _isLoadingJobContact;
     private string _activeView = "All";
+    private int _weeklyGoal = 5;
 
     public IReadOnlyList<string> StatusOptions => ApplicationStatuses;
     public static IReadOnlyList<string> ApplicationStatusOptions => ApplicationStatuses;
@@ -32,6 +33,9 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(databaseDirectory);
         _databasePath = Path.Combine(databaseDirectory, "submissions.db");
         InitializeDatabase();
+        _weeklyGoal = LoadWeeklyGoal();
+        AnalyticsContent.SetWeeklyGoal(_weeklyGoal);
+        AnalyticsContent.WeeklyGoalChangeRequested += SaveWeeklyGoal;
         InterviewsContent.ScheduleRequested += ScheduleInterview;
         InterviewsContent.RemoveRequested += job => RemoveInterview(job);
         InterviewsContent.DetailsRequested += OpenInterviewDetails;
@@ -114,20 +118,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        _activeView = view is "Interviews" or "Saved" ? view : "All";
-        if (view == "Network")
-        {
-            _activeView = "Network";
-        }
+        _activeView = view is "Interviews" or "Saved" or "Network" or "Data" ? view : "All";
         bool showInterviews = _activeView == "Interviews";
         bool showSavedJobs = _activeView == "Saved";
         bool showNetwork = _activeView == "Network";
-        AllJobsContent.Visibility = !showInterviews && !showSavedJobs && !showNetwork
+        bool showAnalytics = _activeView == "Data";
+        AllJobsContent.Visibility = !showInterviews && !showSavedJobs && !showNetwork && !showAnalytics
             ? Visibility.Visible
             : Visibility.Collapsed;
         SavedJobsContent.Visibility = showSavedJobs ? Visibility.Visible : Visibility.Collapsed;
         InterviewsContent.Visibility = showInterviews ? Visibility.Visible : Visibility.Collapsed;
         NetworkTrackingContent.Visibility = showNetwork ? Visibility.Visible : Visibility.Collapsed;
+        AnalyticsContent.Visibility = showAnalytics ? Visibility.Visible : Visibility.Collapsed;
         if (!string.Equals(_activeView, "All", StringComparison.Ordinal))
         {
             HideJobDetails();
@@ -137,6 +139,7 @@ public partial class MainWindow : Window
             "Interviews" => "Interviews",
             "Saved" => "Saved for later",
             "Network" => "Network Tracking",
+            "Data" => "Job Analytics",
             _ => "All jobs"
         };
         AllJobsNavButton.Background = _activeView == "All" ? new System.Windows.Media.SolidColorBrush(
@@ -162,10 +165,16 @@ public partial class MainWindow : Window
         NetworkNavButton.Foreground = showNetwork
             ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 120, 208))
             : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 66, 85));
-        ExportButton.Visibility = showInterviews || showSavedJobs || showNetwork
+        DataNavButton.Background = showAnalytics
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(234, 243, 252))
+            : System.Windows.Media.Brushes.Transparent;
+        DataNavButton.Foreground = showAnalytics
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(40, 120, 208))
+            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 66, 85));
+        ExportButton.Visibility = showInterviews || showSavedJobs || showNetwork || showAnalytics
             ? Visibility.Collapsed
             : Visibility.Visible;
-        AddJobButton.Visibility = showNetwork ? Visibility.Collapsed : Visibility.Visible;
+        AddJobButton.Visibility = showNetwork || showAnalytics ? Visibility.Collapsed : Visibility.Visible;
 
         if (showInterviews)
         {
@@ -643,6 +652,7 @@ public partial class MainWindow : Window
             }
 
             _allJobs = jobs;
+            AnalyticsContent.SetApplications(_allJobs);
             UpdateLocationFilter();
             UpdateDashboardMetrics();
             ApplyFilters();
@@ -779,9 +789,68 @@ public partial class MainWindow : Window
         SavedJobsText.Text = _allJobs.Count(job => job.Status == "Saved").ToString(CultureInfo.CurrentCulture);
         ApplicationsThisWeekText.Text = applicationsThisWeek.ToString(CultureInfo.CurrentCulture);
         UpcomingInterviewsText.Text = upcomingInterviews.ToString(CultureInfo.CurrentCulture);
-        WeeklyGoalText.Text = $"{applicationsThisWeek} / 5";
-        WeeklyGoalProgress.Value = Math.Min(applicationsThisWeek, 5);
+        WeeklyGoalText.Text = $"{applicationsThisWeek} / {_weeklyGoal}";
+        WeeklyGoalProgress.Maximum = _weeklyGoal;
+        WeeklyGoalProgress.Value = Math.Min(applicationsThisWeek, _weeklyGoal);
         AllJobsNavButton.Content = $"▤   All jobs    {_allJobs.Count}";
+    }
+
+    private int LoadWeeklyGoal()
+    {
+        using var connection = new SqliteConnection($"Data Source={_databasePath}");
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT IntegerValue
+            FROM AppSettings
+            WHERE SettingKey = 'WeeklyApplicationGoal';
+            """;
+        object? value = command.ExecuteScalar();
+        if (value is null || value is DBNull)
+        {
+            throw new InvalidDataException("The saved weekly application goal is missing.");
+        }
+
+        int goal = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+        if (goal is < 1 or > 1000)
+        {
+            throw new InvalidDataException("The saved weekly application goal is outside the allowed range.");
+        }
+
+        return goal;
+    }
+
+    private void SaveWeeklyGoal(int goal)
+    {
+        try
+        {
+            using var connection = new SqliteConnection($"Data Source={_databasePath}");
+            connection.Open();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO AppSettings (SettingKey, IntegerValue)
+                VALUES ('WeeklyApplicationGoal', $goal)
+                ON CONFLICT(SettingKey) DO UPDATE SET IntegerValue = excluded.IntegerValue;
+                """;
+            command.Parameters.AddWithValue("$goal", goal);
+            command.ExecuteNonQuery();
+        }
+        catch (Exception exception) when (
+            exception is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                $"The weekly application goal could not be saved. {exception.Message}",
+                "Settings Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
+        _weeklyGoal = goal;
+        AnalyticsContent.SetWeeklyGoal(goal);
+        UpdateDashboardMetrics();
     }
 
     private void InitializeDatabase()
@@ -826,6 +895,20 @@ public partial class MainWindow : Window
                 );
                 """;
             createContactsCommand.ExecuteNonQuery();
+        }
+
+        using (var createSettingsCommand = connection.CreateCommand())
+        {
+            createSettingsCommand.CommandText = """
+                CREATE TABLE IF NOT EXISTS AppSettings (
+                    SettingKey TEXT PRIMARY KEY,
+                    IntegerValue INTEGER NOT NULL
+                );
+                INSERT INTO AppSettings (SettingKey, IntegerValue)
+                VALUES ('WeeklyApplicationGoal', 5)
+                ON CONFLICT(SettingKey) DO NOTHING;
+                """;
+            createSettingsCommand.ExecuteNonQuery();
         }
 
         var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
