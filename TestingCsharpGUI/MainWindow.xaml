@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:TestingCsharpGUI"
         Loaded="MainWindow_Loaded"
-        Title="Job Search" Height="820" Width="1440"
+        Title="Ditch the Sheet" Height="820" Width="1440"
         MinHeight="680" MinWidth="1080"
         Background="#F4F6F8" WindowStartupLocation="CenterScreen">
     <Window.Resources>
@@ -47,7 +47,7 @@
         <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E1E6EB" BorderThickness="0,0,1,0">
             <DockPanel Margin="16,18">
                 <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="JOB SEARCH" FontSize="17" FontWeight="Bold" Foreground="#2878D0" Margin="5,0,0,5"/>
+                    <TextBlock Text="DITCH THE SHEET" FontSize="17" FontWeight="Bold" Foreground="#2878D0" Margin="5,0,0,5"/>
                     <TextBlock Text="Personal job workspace" FontSize="11" Foreground="#8793A0" Margin="5,0,0,22"/>
                     <Button x:Name="AllJobsNavButton" Content="▤   All jobs" Tag="All" Click="Navigation_Click"
                             HorizontalContentAlignment="Left" Margin="0,0,0,5" BorderThickness="0" Background="#EAF3FC" Foreground="#2878D0"/>

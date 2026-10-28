@@ -10,12 +10,18 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <StackPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="Application analytics" FontSize="20" FontWeight="Bold"
-                       Foreground="{StaticResource TextBrush}"/>
-            <TextBlock Text="Track the number of job applications over time."
-                       Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
-        </StackPanel>
+        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="Application analytics" FontSize="20" FontWeight="Bold"
+                           Foreground="{StaticResource TextBrush}"/>
+                <TextBlock Text="Track the number of job applications over time."
+                           Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Button DockPanel.Dock="Right" Content="Change weekly goal" Padding="12,7"
+                    Background="#2878D0" Foreground="White" BorderBrush="#2878D0"
+                    FontWeight="SemiBold" VerticalAlignment="Top"
+                    Click="ChangeWeeklyGoal_Click"/>
+        </DockPanel>
         <Border Grid.Row="1" Background="White" BorderBrush="#E2E7EC" BorderThickness="1"
                 CornerRadius="5" Padding="16">
             <Grid>
@@ -41,19 +47,52 @@
                             <ComboBoxItem Content="By week"/>
                             <ComboBoxItem Content="By month"/>
                         </ComboBox>
-                        <Button Content="Change weekly goal" Padding="12,7"
-                                Background="#2878D0" Foreground="White" BorderBrush="#2878D0"
-                                FontWeight="SemiBold" Click="ChangeWeeklyGoal_Click"/>
                     </StackPanel>
                 </DockPanel>
                 <Grid Grid.Row="1">
-                    <Canvas x:Name="ChartCanvas" SizeChanged="ChartCanvas_SizeChanged"/>
-                    <TextBlock x:Name="EmptyState"
-                               Text="No applications to chart yet. Add a job with a date applied."
-                               Foreground="{StaticResource MutedBrush}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"
-                               IsHitTestVisible="False"/>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Applications over time" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextBrush}" Margin="0,0,0,4"/>
+                        <Grid Grid.Row="1">
+                            <Canvas x:Name="ChartCanvas" SizeChanged="ChartCanvas_SizeChanged"/>
+                            <TextBlock x:Name="EmptyState"
+                                       Text="No applications to chart yet. Add a job with a date applied."
+                                       Foreground="{StaticResource MutedBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"
+                                       IsHitTestVisible="False"/>
+                        </Grid>
+                    </Grid>
+                    <Grid Grid.Row="1" Margin="0,8,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0">
+                            <TextBlock Text="Interview rate per application" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextBrush}" Margin="0,0,0,2"/>
+                            <TextBlock x:Name="RatioSummary" FontSize="11"
+                                       Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4"/>
+                        </StackPanel>
+                        <Grid Grid.Row="1">
+                            <Canvas x:Name="RatioChartCanvas"
+                                    SizeChanged="RatioChartCanvas_SizeChanged"/>
+                            <TextBlock x:Name="RatioEmptyState"
+                                       Text="Add dated applications to see the interview rate."
+                                       Foreground="{StaticResource MutedBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextWrapping="Wrap" TextAlignment="Center" MaxWidth="320"
+                                       IsHitTestVisible="False"/>
+                        </Grid>
+                    </Grid>
                 </Grid>
             </Grid>
         </Border>

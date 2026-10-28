@@ -55,9 +55,16 @@ public partial class AnalyticsView : UserControl
         RenderChart();
     }
 
+    private void RatioChartCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        RenderChart();
+    }
+
     private void RenderChart()
     {
-        if (ChartCanvas is null || PeriodSelector is null || ChartSummary is null || EmptyState is null)
+        if (ChartCanvas is null || RatioChartCanvas is null || PeriodSelector is null
+            || ChartSummary is null || EmptyState is null || RatioSummary is null
+            || RatioEmptyState is null)
         {
             return;
         }
@@ -65,7 +72,8 @@ public partial class AnalyticsView : UserControl
         string period = (PeriodSelector.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "By day";
         DateTime today = DateTime.Today;
         List<(DateTime Start, string Label)> buckets = CreateBuckets(period, today);
-        int[] counts = new int[buckets.Count];
+        int[] applicationCounts = new int[buckets.Count];
+        int[] interviewCounts = new int[buckets.Count];
         var countedIds = new HashSet<long>();
 
         foreach (JobApplication application in _applications)
@@ -82,19 +90,41 @@ public partial class AnalyticsView : UserControl
             int bucketIndex = FindBucket(buckets, period, appliedDate);
             if (bucketIndex >= 0)
             {
-                counts[bucketIndex]++;
+                applicationCounts[bucketIndex]++;
+                if (application.Status == "Interview")
+                {
+                    interviewCounts[bucketIndex]++;
+                }
             }
         }
 
-        int total = counts.Sum();
+        int total = applicationCounts.Sum();
+        int totalInterviews = interviewCounts.Sum();
         ChartSummary.Text = period switch
         {
             "By week" => $"Applications per week · last 12 weeks · {total} total",
             "By month" => $"Applications per month · last 12 months · {total} total",
             _ => $"Applications per day · last 14 days · {total} total"
         };
+        double overallRate = total == 0 ? 0 : (double)totalInterviews / total * 100;
+        RatioSummary.Text = $"{totalInterviews} of {total} applications · {overallRate:0.#}% overall";
         EmptyState.Visibility = total == 0 ? Visibility.Visible : Visibility.Collapsed;
-        DrawBars(buckets, counts);
+        RatioEmptyState.Visibility = total == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        double[] applicationValues = applicationCounts.Select(count => (double)count).ToArray();
+        double applicationMax = applicationValues.Length == 0 ? 0 : applicationValues.Max();
+        double applicationStep = Math.Max(1, Math.Ceiling(applicationMax / 4));
+        DrawBars(
+            ChartCanvas,
+            buckets,
+            applicationValues,
+            Math.Max(applicationStep * 4, 4),
+            isPercentage: false);
+
+        double[] interviewRates = applicationCounts
+            .Select((count, index) => count == 0 ? 0 : (double)interviewCounts[index] / count * 100)
+            .ToArray();
+        DrawBars(RatioChartCanvas, buckets, interviewRates, 100, isPercentage: true);
     }
 
     private static List<(DateTime Start, string Label)> CreateBuckets(string period, DateTime today)
@@ -155,11 +185,16 @@ public partial class AnalyticsView : UserControl
         return -1;
     }
 
-    private void DrawBars(IReadOnlyList<(DateTime Start, string Label)> buckets, IReadOnlyList<int> counts)
+    private void DrawBars(
+        Canvas canvas,
+        IReadOnlyList<(DateTime Start, string Label)> buckets,
+        IReadOnlyList<double> values,
+        double maxValue,
+        bool isPercentage)
     {
-        ChartCanvas.Children.Clear();
-        double width = ChartCanvas.ActualWidth;
-        double height = ChartCanvas.ActualHeight;
+        canvas.Children.Clear();
+        double width = canvas.ActualWidth;
+        double height = canvas.ActualHeight;
         if (width <= 0 || height <= 0 || buckets.Count == 0)
         {
             return;
@@ -171,9 +206,6 @@ public partial class AnalyticsView : UserControl
         const double bottom = 38;
         double plotWidth = Math.Max(1, width - left - right);
         double plotHeight = Math.Max(1, height - top - bottom);
-        int maxCount = counts.Count == 0 ? 0 : counts.Max();
-        int step = Math.Max(1, (int)Math.Ceiling(maxCount / 4d));
-        int maxValue = Math.Max(step * 4, 4);
 
         for (int tick = 0; tick <= 4; tick++)
         {
@@ -187,18 +219,23 @@ public partial class AnalyticsView : UserControl
                 Stroke = new SolidColorBrush(Color.FromRgb(226, 231, 236)),
                 StrokeThickness = 1
             };
-            ChartCanvas.Children.Add(line);
-            AddLabel((maxValue * tick / 4).ToString(CultureInfo.CurrentCulture), 0, y - 9, left - 8, 18, TextAlignment.Right);
+            canvas.Children.Add(line);
+            double tickValue = maxValue * tick / 4;
+            string tickLabel = isPercentage
+                ? $"{tickValue:0}%"
+                : tickValue.ToString("0", CultureInfo.CurrentCulture);
+            AddLabel(canvas, tickLabel, 0, y - 9, left - 8, 18, TextAlignment.Right);
         }
 
         double slotWidth = plotWidth / buckets.Count;
         double barWidth = Math.Min(34, slotWidth * 0.62);
         for (int index = 0; index < buckets.Count; index++)
         {
-            double barHeight = plotHeight * counts[index] / maxValue;
+            double value = values[index];
+            double barHeight = plotHeight * value / maxValue;
             double x = left + slotWidth * index + (slotWidth - barWidth) / 2;
             double y = top + plotHeight - barHeight;
-            if (counts[index] > 0)
+            if (value > 0)
             {
                 var bar = new Rectangle
                 {
@@ -210,15 +247,25 @@ public partial class AnalyticsView : UserControl
                 };
                 Canvas.SetLeft(bar, x);
                 Canvas.SetTop(bar, y);
-                ChartCanvas.Children.Add(bar);
-                AddLabel(counts[index].ToString(CultureInfo.CurrentCulture), x - 8, y - 20, barWidth + 16, 18, TextAlignment.Center);
+                canvas.Children.Add(bar);
+                string valueLabel = isPercentage
+                    ? $"{value:0.#}%"
+                    : value.ToString("0", CultureInfo.CurrentCulture);
+                AddLabel(canvas, valueLabel, x - 12, y - 20, barWidth + 24, 18, TextAlignment.Center);
             }
 
-            AddLabel(buckets[index].Label, left + slotWidth * index, top + plotHeight + 8, slotWidth, 20, TextAlignment.Center);
+            AddLabel(canvas, buckets[index].Label, left + slotWidth * index, top + plotHeight + 8, slotWidth, 20, TextAlignment.Center);
         }
     }
 
-    private void AddLabel(string text, double left, double top, double width, double height, TextAlignment alignment)
+    private static void AddLabel(
+        Canvas canvas,
+        string text,
+        double left,
+        double top,
+        double width,
+        double height,
+        TextAlignment alignment)
     {
         var label = new TextBlock
         {
@@ -232,7 +279,7 @@ public partial class AnalyticsView : UserControl
         };
         Canvas.SetLeft(label, left);
         Canvas.SetTop(label, top);
-        ChartCanvas.Children.Add(label);
+        canvas.Children.Add(label);
     }
 
     private static DateTime StartOfWeek(DateTime date)
